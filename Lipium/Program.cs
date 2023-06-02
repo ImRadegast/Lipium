@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Security.Policy;
 using System.Collections.Generic;
 using Newtonsoft.Json;
+using System.Net.Http;
 
 class HttpServer
 {
@@ -20,18 +21,18 @@ class HttpServer
         "    <title>Achetez Lipium et rendez moi riche</title>" +
         "  </head>" +
         "  <body>" +
-       //"    <p>Page Views: {0}</p>" +
+        //"    <p>Page Views: {0}</p>" +
         "    <form method=\"post\" action=\"shutdown\">" +
         "      <input type=\"submit\" value=\"Shutdown\" {0}>" +
         "    </form>" +
         "  </body>" +
         "</html>";
 
-    
+
     public static async Task HandleIncomingConnections()
     {
         bool runServer = true;
-
+        List<Transaction> lstTransactions = new List<Transaction>();
         // While a user hasn't visited the `shutdown` url, keep on handling requests
         while (runServer)
         {
@@ -40,14 +41,14 @@ class HttpServer
             // Peel out the requests and response objects
             HttpListenerRequest req = ctx.Request;
             HttpListenerResponse resp = ctx.Response;
-         
+
 
             // If `shutdown` url requested w/ POST, then shutdown the server after serving the page
             if ((req.HttpMethod == "POST") && (req.Url.AbsolutePath == "/shutdown"))
             {
                 Console.WriteLine("Shutdown requested");
                 runServer = false;
-            }else if (  req.Url.AbsolutePath == "/mine")
+            } else if (req.Url.AbsolutePath == "/mine")
             {
 
                 //
@@ -62,36 +63,40 @@ class HttpServer
                 if (idTrans != null && oTrans != null)
                 {
 
-                     bool verif = VerifTransaction(oTrans);
-                     string hash = HashSHA256(oTrans);
+                    bool verif = VerifTransaction(oTrans);
+                    string hash = HashSHA256(oTrans);
                     if (!verif)
                     {
-                        
+
                         data = Encoding.UTF8.GetBytes(" une erreur est survenue Verifier vos valeur puis reesayer");
-                       
-                    }else if (hash == idTrans && hash != null )
-                     {
-                         if (hash.StartsWith(difficulté))
-                         {
-                             data = Encoding.UTF8.GetBytes(" Difficulté respecté un nouveau block vien d'etre crée ! difficulté :  " + difficulté + "hash : " + hash);
-                         }
-                         else 
-                         { 
-                            data = Encoding.UTF8.GetBytes("Les Hash Correspondent !! origine : " + idTrans + " hash : " + hash + " Difficulté " + difficulté); 
-                         }
-                     }
+
+                    } else if (hash == idTrans && hash != null)
+                    {
+
+                        Transaction transaction = JsonConvert.DeserializeObject<Transaction>(oTrans);
+                        lstTransactions.Add(transaction);
+                        data = Encoding.UTF8.GetBytes("Les Hash Correspondent !! trnasaction enregistrer ");
+
+                        int nonce = 0;
+                        string newHash = HashTransaction(lstTransactions, nonce);
+                        bool hashverifier = VerifBlockValide(newHash);
+                        if (hashverifier)
+                        {
+                            CreateNewBlock(hash, nonce, lstTransactions);
+                        }
+                    }
                     else
-                     {
+                    {
                         data = Encoding.UTF8.GetBytes("Les Hash ne corresponde pas " + idTrans + " hash : " + hash);
-                     }
+                    }
                 }
-                else 
+                else
                 {
                     data = Encoding.UTF8.GetBytes("Parametre non valide");
                 }
                 loadingScreen(data, resp);
             }
-            else 
+            else
             {
                 string disableSubmit = !runServer ? "disabled" : "";
                 byte[] data = Encoding.UTF8.GetBytes(String.Format(pageData, disableSubmit));
@@ -99,13 +104,16 @@ class HttpServer
                 resp.ContentEncoding = Encoding.UTF8;
                 resp.ContentLength64 = data.LongLength;
                 // Write the response info
-                
-            
-                loadingScreen(data,resp);
+
+
+                loadingScreen(data, resp);
             }
-            
+
         }
     }
+
+
+
 
     /// <summary>
     /// Gere l'affichage des differente reponses de la page mineur
@@ -117,7 +125,7 @@ class HttpServer
         // Write out to the response stream (asynchronously), then close it
         await resp.OutputStream.WriteAsync(data, 0, data.Length);
         resp.Close();
-        
+
     }
 
     /// <summary>
@@ -126,7 +134,7 @@ class HttpServer
     /// <param name="lstTransaction"></param>
     /// <param name="nonce"></param>
     /// <returns> String</returns>
-   private static string HashTransaction(List<Transaction> lstTransaction, int nonce)
+    private static string HashTransaction(List<Transaction> lstTransaction, int nonce)
     {
         using (SHA256 sha256 = SHA256.Create())
         {
@@ -166,7 +174,7 @@ class HttpServer
     /// </summary>
     /// <param name="hash"></param>
     /// <returns>Boolean</returns>
-    private bool VerifBlockValide(string hash)
+    public static bool VerifBlockValide(string hash)
     {
         string difficulty = GetDifficulty();
         bool retour = hash.StartsWith(difficulty) ? true : false;
@@ -180,6 +188,42 @@ class HttpServer
         public string Hash { get; set; }
         public int Nonce { get; set; }
         public List<Transaction> Transactions { get; set; }
+    }
+    private static Block CreateNewBlock(string hash, int nonce, List<Transaction> lstTransaction)
+    {
+
+        
+        /*Task<int> lastBlockTask = GetLastBlock();
+        int lastblock = lastBlockTask.GetAwaiter().GetResult();*/
+
+
+        Block block = new Block();
+
+        block.Index = 0; //lastblock;
+        block.Timestamp = DateTime.Now;
+        block.PreviousHash = "modifQuandJoryAFini";
+        block.Hash = hash;
+        block.Nonce = nonce;
+        block.Transactions = lstTransaction;
+        return block;
+
+    }
+    /// <summary>
+    /// Envoie une Requete a l'api de la BDD 
+    /// </summary>
+    /// <returns>id du dernier block int </returns>
+    private async static Task<int> GetLastBlock()
+    {
+        string url = "http://25.28.20.82:8000/lastblock";
+
+        using (HttpClient client = new HttpClient())
+        {
+            HttpResponseMessage response = await client.GetAsync(url);
+            string responseBody = await response.Content.ReadAsStringAsync();
+            int lastBlock = int.Parse(responseBody);
+
+            return lastBlock;
+        }
     }
     /// <summary>
     /// hash une seule valeur en Sha256
@@ -227,6 +271,7 @@ class HttpServer
         public string IdRcv { get; set; }
         public decimal Montant { get; set; }
     }
+    
     public static void Main(string[] args)
     {
         // Create a Http server and start listening for incoming connections
