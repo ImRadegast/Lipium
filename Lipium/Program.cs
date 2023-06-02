@@ -60,40 +60,31 @@ class HttpServer
                 string oTrans = req.QueryString["oTrans"];  // Doit devenir un objet
                 string difficulté = "0";
                 byte[] data;
-                if (idTrans != null && oTrans != null)
+
+                if (VerifTransaction(idTrans, oTrans))
                 {
+                    Transaction transaction = JsonConvert.DeserializeObject<Transaction>(oTrans);
+                    lstTransactions.Add(transaction);
+                    data = Encoding.UTF8.GetBytes("Les Hash Correspondent !! transaction enregistrer ");
+                    
+                    int nonce = 0;
+                    string hash ="";
+                    bool hashverifier = false;
 
-                    bool verif = VerifTransaction(oTrans);
-                    string hash = HashSHA256(oTrans);
-                    if (!verif)
-                    {
-
-                        data = Encoding.UTF8.GetBytes(" une erreur est survenue Verifier vos valeur puis reesayer");
-
-                    } else if (hash == idTrans && hash != null)
-                    {
-
-                        Transaction transaction = JsonConvert.DeserializeObject<Transaction>(oTrans);
-                        lstTransactions.Add(transaction);
-                        data = Encoding.UTF8.GetBytes("Les Hash Correspondent !! trnasaction enregistrer ");
-
-                        int nonce = 0;
-                        string newHash = HashTransaction(lstTransactions, nonce);
-                        bool hashverifier = VerifBlockValide(newHash);
-                        if (hashverifier)
-                        {
-                            CreateNewBlock(hash, nonce, lstTransactions);
-                        }
+                    while (!hashverifier) 
+                    { 
+                        hash = HashTransaction(lstTransactions, nonce);
+                        hashverifier = VerifBlockValide(hash);
+                        nonce++;
                     }
-                    else
-                    {
-                        data = Encoding.UTF8.GetBytes("Les Hash ne corresponde pas " + idTrans + " hash : " + hash);
-                    }
+
+                    Block block = CreateNewBlock(hash, nonce, lstTransactions);
+                    
+
                 }
-                else
-                {
-                    data = Encoding.UTF8.GetBytes("Parametre non valide");
-                }
+                else data = Encoding.UTF8.GetBytes("Information Invalide");
+                
+              
                 loadingScreen(data, resp);
             }
             else
@@ -111,8 +102,6 @@ class HttpServer
 
         }
     }
-
-
 
 
     /// <summary>
@@ -208,6 +197,20 @@ class HttpServer
         return block;
 
     }
+    private async static void SendBlockDB(Block block)
+    {
+        try {
+            string jsonString = JsonConvert.SerializeObject(block);
+            string url = "http://25.28.20.82:8000/storage?block="+jsonString;
+
+            using (HttpClient client = new HttpClient())
+            {
+                HttpResponseMessage response = await client.GetAsync(url);
+                string responseBody = await response.Content.ReadAsStringAsync();
+            }
+        }
+        catch(Exception e) { throw new InvalidOperationException(e.Message); }   
+    }
     /// <summary>
     /// Envoie une Requete a l'api de la BDD 
     /// </summary>
@@ -225,6 +228,7 @@ class HttpServer
             return lastBlock;
         }
     }
+    
     /// <summary>
     /// hash une seule valeur en Sha256
     /// </summary>
@@ -247,23 +251,26 @@ class HttpServer
     }
 
     /// <summary>
-    /// Verifie si les donnée envoyer par le clients sont entière
+    /// Verifie si les donnée sont vide et si les hash correspondent
     /// </summary>
+    /// <param name="idTrans"></param>
     /// <param name="json"></param>
-    /// <returns>Bool</returns>
-    private static bool VerifTransaction(string json)
+    /// <returns></returns>
+    public static bool VerifTransaction(string idTrans, string json)
     {
-        try
+        //verifie si les donnée entrée sont vide
+        if (string.IsNullOrEmpty(idTrans) && (string.IsNullOrEmpty(json)))
         {
-            Transaction transaction = JsonConvert.DeserializeObject<Transaction>(json);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            
-            return false;
-        }
-           
+            //hash le json pour vérifier qu'il coincide avec le hash envoyé
+            string hash = HashSHA256(json);
+            if (hash == idTrans)
+            {
+                return true;
+            }
+            else return false;
+       
+        }else return false;
+
     }
     public class Transaction
     {
