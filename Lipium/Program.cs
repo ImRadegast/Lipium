@@ -106,6 +106,12 @@ class HttpServer
             
         }
     }
+
+    /// <summary>
+    /// Gere l'affichage des differente reponses de la page mineur
+    /// </summary>
+    /// <param name="data"></param>
+    /// <param name="resp"></param>
     public async static void loadingScreen(byte[] data, HttpListenerResponse resp)
     {
         // Write out to the response stream (asynchronously), then close it
@@ -114,7 +120,73 @@ class HttpServer
         
     }
 
-    public static string HashSHA256(string valeur)
+    /// <summary>
+    /// Hash une list de Transaction avec un nonce 
+    /// </summary>
+    /// <param name="lstTransaction"></param>
+    /// <param name="nonce"></param>
+    /// <returns> String</returns>
+   private static string HashTransaction(List<Transaction> lstTransaction, int nonce)
+    {
+        using (SHA256 sha256 = SHA256.Create())
+        {
+            StringBuilder stringBuilder = new StringBuilder();
+
+            foreach (var transaction in lstTransaction)
+            {
+                stringBuilder.Append(transaction);
+            }
+
+            stringBuilder.Append(nonce);
+
+            byte[] hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(stringBuilder.ToString()));
+
+            StringBuilder hashBuilder = new StringBuilder();
+            for (int i = 0; i < hashBytes.Length; i++)
+            {
+                hashBuilder.Append(hashBytes[i].ToString("x2")); // Convertit chaque octet en sa représentation hexadécimale
+            }
+
+            return hashBuilder.ToString();
+        }
+    }
+
+    /// <summary>
+    /// Renvoie la difficulté actuelle
+    /// </summary>
+    /// <returns>String </returns>
+    private static string GetDifficulty()
+    {
+        string difficulty = "";
+        return difficulty;
+    }
+
+    /// <summary>
+    /// Verifie si le hash permet la creation d'un nouveau block par rapport a la difficulté
+    /// </summary>
+    /// <param name="hash"></param>
+    /// <returns>Boolean</returns>
+    private bool VerifBlockValide(string hash)
+    {
+        string difficulty = GetDifficulty();
+        bool retour = hash.StartsWith(difficulty) ? true : false;
+        return retour;
+    }
+    public class Block
+    {
+        public int Index { get; set; }
+        public DateTime Timestamp { get; set; }
+        public string PreviousHash { get; set; }
+        public string Hash { get; set; }
+        public int Nonce { get; set; }
+        public List<Transaction> Transactions { get; set; }
+    }
+    /// <summary>
+    /// hash une seule valeur en Sha256
+    /// </summary>
+    /// <param name="valeur"></param>
+    /// <returns>hash sous forme de String </returns>
+    private static string HashSHA256(string valeur)
     {
         using (SHA256 sha256 = SHA256.Create())
         {
@@ -129,7 +201,13 @@ class HttpServer
             return stringBuilder.ToString();
         }
     }
-    public static bool VerifTransaction(string json)
+
+    /// <summary>
+    /// Verifie si les donnée envoyer par le clients sont entière
+    /// </summary>
+    /// <param name="json"></param>
+    /// <returns>Bool</returns>
+    private static bool VerifTransaction(string json)
     {
         try
         {
@@ -142,15 +220,6 @@ class HttpServer
             return false;
         }
            
-    }
-    public class Block
-    {
-        public int Index { get; set; }
-        public DateTime Timestamp { get; set; }
-        public string PreviousHash { get; set; }
-        public string Hash { get; set; }
-        public int Nonce { get; set; }
-        public List<Transaction> Transactions { get; set; }
     }
     public class Transaction
     {
